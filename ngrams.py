@@ -60,7 +60,7 @@ def trim_ngram_array(ngram, num):
     return np.array(ngram_list)
 
 """
-with open('2-gram.pkl', 'rb') as f:
+with open('2-gram.pkl', 'rb') as f:NgramLanguageModel
     bigram = pickle.load(f)
 """
 
@@ -89,6 +89,38 @@ def train_language_models(ngram_data, alpha=0.1):
     for lang, counts in ngram_data.items():
         models[lang] = NgramLanguageModel(counts, alpha=alpha)
     return models
+
+
+def predict_language(models:dict, text:str, output: str):
+    """
+    Returns the langauge of a given text.
+
+    Parameters
+    ----------
+    models : dict
+        The models are generated using the train_language_models() function.
+    text : str
+        The string to be analysed.
+    output : str
+        'all' for all languages ranked
+        
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+    TYPE
+        DESCRIPTION.
+
+    """
+    
+    #trigrams = extract_trigrams(normalize(text))
+    ngrams = text
+    scores = {
+        lang: model.log_probability(ngrams)
+        for lang, model in models.items()
+    }
+    return max(scores, key=scores.get), scores if output=='all' else max(scores, key=scores.get) # this may be buggy
+    # .Can also return all scores to compare what languages are similar
 
 if __name__ == "__main__":
     models = train_language_models(ngram_data, alpha=0.1)

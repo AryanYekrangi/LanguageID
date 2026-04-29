@@ -1,3 +1,5 @@
+from collections import Counter
+
 def load_data(filename:str) -> list[str]:
     """
     Load data from text file and convert it into a list of strings.
@@ -25,3 +27,27 @@ def load_data(filename:str) -> list[str]:
     return data_list
 
 
+def combine_ngrams(df, lang:str, col) -> dict:
+    """
+    Combines dictionary counts for all items in a dictionary for a specific language.
+
+    Parameters
+    ----------
+    df : pandas dataframe
+        DESCRIPTION.
+    lang : TYPE
+        DESCRIPTION.
+    col : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    total : TYPE
+        DESCRIPTION.
+
+    """
+    lang_df = df[df.target_language==lang]
+    total = Counter()
+    for i in range(len(lang_df)):
+        total += Counter(lang_df[col].values[i])
+    return total
