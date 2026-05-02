@@ -7,7 +7,6 @@ from ngrams import ngram2dic, string2ngram, preprocess, train_language_models, p
 df_train = pd.read_pickle("df_train.pkl")
 df_test = pd.read_pickle("df_test.pkl")
 
-
 # COMBINING NGRAMS FROM TRAINING DATA FOR TRAINING
 lang_text_all_ngrams = {}
 for lang in df_train.target_language.unique():
@@ -23,21 +22,27 @@ models_romanized = train_language_models(lang_romanized_all_ngrams, alpha=0.1)
 
 
 # TEST
-# THIS IS VERY SLOW
+M = 100 # Mth first observation in the testing data
 from time import perf_counter
 start_t = perf_counter()
-results = []
+results_list = []
 #for i in range(len(df_train)):
-for i in range(1000):
-    text_ngrams = df_test.iloc[i].ngrams
-    prediction = predict_language(models_text, text_ngrams, output='')
+for i in range(M):
+    text_ngrams = df_test.iloc[i].text_ngrams
+    prediction = predict_language(models_text, text_ngrams, output='scores')
     label = df_test.iloc[i].target_language
-    results.append([prediction, label])
+    results_list.append(prediction)
+    #results.append([prediction, label])
+results_df = pd.DataFrame(results_list)
+results_max = results_df.idxmax(axis=1)
+results_df['MAX'] = results_max
+results_df['LABEL'] = df_test.target_language.iloc[:M]
 end_t = perf_counter()
 print(end_t - start_t)
-
+# use this dataframe for analysis
+    
 start_t = perf_counter()
-pred2 = df_test.iloc[:1000].ngrams.apply(lambda dic: predict_language(models_text, dic, output=''))
+prediction = df_test.iloc[:100].ngrams.apply(lambda dic: predict_language(models_text, dic, output=''))
 end_t = perf_counter()
 print(end_t - start_t)
 
@@ -45,3 +50,4 @@ predictions = [result[0][0] for result in results]
 labels = [result[1] for result in results]
 from sklearn.metrics import accuracy_score
 accuracy_score(labels, predictions, sample_weight=None) #0.8796
+

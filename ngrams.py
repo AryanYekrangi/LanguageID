@@ -91,7 +91,7 @@ def train_language_models(ngram_data, alpha=0.1):
     return models
 
 
-def predict_language(models:dict, text:str, output: str):
+def predict_language(models:dict, ngrams:dict, output: str):
     """
     Returns the langauge of a given text.
 
@@ -114,13 +114,17 @@ def predict_language(models:dict, text:str, output: str):
     """
     
     #trigrams = extract_trigrams(normalize(text))
-    ngrams = text
     scores = {
-        lang: model.log_probability(ngrams)
-        for lang, model in models.items()
+        lang: model.log_probability(ngrams) for lang, model in models.items()
     }
-    return max(scores, key=scores.get), scores if output=='all' else max(scores, key=scores.get) # this may be buggy
-    # .Can also return all scores to compare what languages are similar
+    #return max(scores, key=scores.get), scores if output=='all' else max(scores, key=scores.get) # this may be buggy
+    if output == 'max':
+        return max(scores, key=scores.get)
+    elif output == 'scores':
+        return scores
+    elif output == 'scores-and-max':
+        return (scores, max(scores, key=scores.get))
+    return scores
 
 if __name__ == "__main__":
     models = train_language_models(ngram_data, alpha=0.1)
