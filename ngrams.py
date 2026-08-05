@@ -1,87 +1,52 @@
 import numpy as np
 import math
 from collections import Counter
-
-# consider preprocessing empty space \n space tab etc.
-#Arabic "٪"
+import re
+import regex
+from scipy.sparse import csr_matrix
 
 def preprocess(string):
-    punctuations = """ \n\t!"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~。，“”:《》（）٪0123456789"""
-    for i in range(len(string)):
-        if string[i] in punctuations:
-            string = string.replace(string[i], '_')
-    #string = string.replace('_', '')
+    string = regex.sub(r'[\p{P}\p{S}\s]+', '_', string)
+    string = re.sub(r'_+', '_', string)
     return string
 
+
 def string2ngram(string, n):
-    ngram_array = []
-    for i in range(len(string)):
-        if i <  len(string) - (n-1):
-            current_ngram = []
-            for j in range(n):
-                current_ngram.append(string[i+j])
-            ngram_array.append(current_ngram)
-    return ngram_array
+    string = '\x02' * max(n-1, 1) + string + '\x03' * max(n-1, 1)
+    return [string[i:i+n] for i in range(len(string)-n+1)]
 
-def ngram2dic(array:list):
+
+def ngram2dic(text, min_n, max_n):
     dic = {}
-    for item in array:
-        key = ''.join(item)
-        if key in dic:
-            dic[key] += 1
-        else:
-            dic[key] = 1
-    # sorting dic
-    sorted_dic = dict(sorted(dic.items(), key=lambda x:x[1], reverse=True))
-    return sorted_dic
+    for n in range(min_n, max_n + 1):
+        for ng in string2ngram(text, n):
+            if ng in dic:
+                dic[ng] += 1
+            else:
+                dic[ng] = 1
+    return dic
 
-# NEED TO EDIT THIS
-def trim_ngram_dic(ngram, num):
-    """return the n-most common n-grams
-    trim_ngram(ngram, 5) returns the 5 most frequent n-grams
-    ngram must be a dictionary of dictionaries
-    """
-    counter = num
-    current_lang_dic = {}
-    for key, value in ngram.items():
-        if(counter>0):
-            current_lang_dic[key] = value
-            counter -= 1
-    return current_lang_dic
-
-def trim_ngram_array(ngram, num):
-    """returns the most common ngrams without their frequency"""
-    counter = num
-    ngram_list = []
-    for key, value in ngram.items():
-        if(counter>0):
-            ngram_list.append(key)
-            counter -= 1
-    return np.array(ngram_list)
-
-"""
-with open('2-gram.pkl', 'rb') as f:NgramLanguageModel
-    bigram = pickle.load(f)
-"""
 
 class NgramLanguageModel:
-    def __init__(self, ngram_counts, alpha=0.1):  
-        self.alpha = alpha
-        self.ngram_counts = ngram_counts
-        self.total = sum(ngram_counts.values())
-        self.vocab_size = len(ngram_counts)
+    def __init__(self, ngram_counts, alpha=0.1):
+        total = sum(ngram_counts.values())
+        vocab_size = len(ngram_counts)
+        denom = total + alpha * vocab_size
+        self.unknown_log_prob = math.log(alpha / denom)
+        self.log_probs = {
+            ng: math.log((count + alpha) / denom)
+            for ng, count in ngram_counts.items()
+        }
+
 
     def log_probability(self, ngrams):
-        """
-        ngrams: iterable of ngram strings
-        """
+        get = self.log_probs.get
+        unk = self.unknown_log_prob
         logp = 0.0
-        denom = self.total + self.alpha * self.vocab_size
-        for n in ngrams:
-            count = self.ngram_counts.get(n, 0)
-            prob = (count + self.alpha) / denom
-            logp += math.log(prob)
-        return logp
+        total = sum(ngrams.values()) # added later
+        for ng, count in ngrams.items():
+            logp += count * get(ng, unk)
+        return logp / total # originally return logp / len(ngrams)
 
 
 def train_language_models(ngram_data, alpha=0.1):
@@ -112,12 +77,9 @@ def predict_language(models:dict, ngrams:dict, output: str):
         DESCRIPTION.
 
     """
-    
-    #trigrams = extract_trigrams(normalize(text))
     scores = {
         lang: model.log_probability(ngrams) for lang, model in models.items()
     }
-    #return max(scores, key=scores.get), scores if output=='all' else max(scores, key=scores.get) # this may be buggy
     if output == 'max':
         return max(scores, key=scores.get)
     elif output == 'scores':
@@ -126,6 +88,33 @@ def predict_language(models:dict, ngrams:dict, output: str):
         return (scores, max(scores, key=scores.get))
     return scores
 
-if __name__ == "__main__":
-    models = train_language_models(ngram_data, alpha=0.1)
+def build_indexer_matrix(models, langs):
+    lang_idx = {lang: i for i, lang in enumerate(langs)}
+    ngram_idx = {}
+    rows, cols, data = [], [], []
 
+    for lang, model in models.items():
+        li = lang_idx[lang]
+        unk = model.unknown_log_prob
+        for ng, val in model.log_probs.items():
+            ni = ngram_idx.setdefault(ng, len(ngram_idx))
+            rows.append(ni)
+            cols.append(li)
+            data.append(val - unk)
+
+    M = csr_matrix((data, (rows, cols)), shape=(len(ngram_idx), len(langs)))
+    return M, ngram_idx, lang_idx
+
+
+def predict_language3_fast(M, ngram_idx, langs, unk_arr, ngrams):
+    N = sum(ngrams.values())
+    rows, data = [], []
+    for ng, count in ngrams.items():
+        i = ngram_idx.get(ng)
+        if i is not None:
+            rows.append(i)
+            data.append(count)
+    v = csr_matrix((data, ([0] * len(rows), rows)), shape=(1, M.shape[0]))
+    accum = v @ M                      # 1 x num_langs sparse result
+    scores = unk_arr + np.asarray(accum.todense()).ravel() / N
+    return dict(zip(langs, scores))

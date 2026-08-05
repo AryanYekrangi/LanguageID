@@ -1,6 +1,8 @@
 from collections import Counter
+from time import perf_counter
+from contextlib import contextmanager
 
-def load_data(filename:str) -> list[str]:
+def load_data(filename:str, strip=True) -> list[str]:
     """
     Load data from text file and convert it into a list of strings.
 
@@ -20,34 +22,38 @@ def load_data(filename:str) -> list[str]:
     y_train = load_data('y_train.txt')
     """
 
-    data_list = []
     with open(filename, encoding='utf-8') as fhand:
-        for line in fhand:
-            data_list.append(line.strip())
-    return data_list
+        if strip:
+            return [line.strip() for line in fhand]
+        else:
+            return [line.rstrip('\n') for line in fhand]
 
+def combine_ngrams(df, ngrams_col):
+    """Sum ngram Counters within each language into one Counter per language."""
+    combined = {}
+    for lang, group in df.groupby("target_language_TR"):
+        total = Counter()
+        for ngram_counts in group[ngrams_col]:
+            total.update(ngram_counts)
+        combined[lang] = total
+    return combined
 
-def combine_ngrams(df, lang:str, col) -> dict:
+class Timer():
     """
-    Combines dictionary counts for all items in a dictionary for a specific language.
+    Callable context manager for timing blocks of code.
+    timer = Timer()
+    with timer('step 1'):
+        # block of code
+        """
+    def __init__(self):
+        self.records = []
+    @contextmanager
+    def __call__(self, name):
+        start = perf_counter()
+        yield
+        end = perf_counter()
+        elapsed = round(end - start, 2)
+        print(f"{name}: {elapsed:.4f} s")
+        self.records.append({"name": name, "time": elapsed})
 
-    Parameters
-    ----------
-    df : pandas dataframe
-        DESCRIPTION.
-    lang : TYPE
-        DESCRIPTION.
-    col : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    total : TYPE
-        DESCRIPTION.
-
-    """
-    lang_df = df[df.target_language==lang]
-    total = Counter()
-    for i in range(len(lang_df)):
-        total += Counter(lang_df[col].values[i])
-    return total
+timer = Timer()
